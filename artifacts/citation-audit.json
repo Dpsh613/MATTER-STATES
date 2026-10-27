@@ -1,0 +1,90 @@
+{
+  "passed": 12,
+  "total": 12,
+  "results": [
+    {
+      "url": "https://openstax.org/books/university-physics-volume-3/pages/9-3-bonding-in-crystalline-solids",
+      "status": 200,
+      "title": "9.3 Bonding in Crystalline Solids - University Physics Volume 3 | OpenStax",
+      "keyword": "Bonding in Crystalline Solids",
+      "passed": true
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Copper",
+      "status": 200,
+      "title": "Copper - Wikipedia",
+      "keyword": "Lattice constant",
+      "passed": true
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Iron",
+      "status": 200,
+      "title": "Iron - Wikipedia",
+      "keyword": "286.65",
+      "passed": true
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Sodium_chloride",
+      "status": 200,
+      "title": "Sodium chloride - Wikipedia",
+      "keyword": "Lattice constant",
+      "passed": true
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tight_binding",
+      "status": 200,
+      "title": "Tight binding - Wikipedia",
+      "keyword": "Tight binding",
+      "passed": true
+    },
+    {
+      "url": "http://hyperphysics.phy-astr.gsu.edu/hbase/electric/ohmmic.html",
+      "status": 200,
+      "title": "Ohm's Law, Microscopic View",
+      "keyword": "Ohm's Law",
+      "passed": true
+    },
+    {
+      "url": "https://physics.nist.gov/cuu/Constants/",
+      "status": 200,
+      "title": "Fundamental Physical Constants from NIST",
+      "keyword": "Fundamental Physical Constants",
+      "passed": true
+    },
+    {
+      "url": "https://www.britannica.com/science/Curie-point",
+      "status": 200,
+      "title": "Curie point | Temperature, Magnetism & Ferromagnetism | Britannica",
+      "keyword": "Curie point",
+      "passed": true
+    },
+    {
+      "url": "https://openstax.org/books/university-physics-volume-2/pages/11-1-magnetism-and-its-historical-discoveries",
+      "status": 200,
+      "title": "11.1 Magnetism and Its Historical Discoveries - University Physics Volume 2 | OpenStax",
+      "keyword": "Magnetism and Its Historical Discoveries",
+      "passed": true
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Crystallographic_defect",
+      "status": 200,
+      "title": "Crystallographic defect - Wikipedia",
+      "keyword": "Crystallographic defect",
+      "passed": true
+    },
+    {
+      "url": "https://www.nobelprize.org/prizes/physics/1972/summary/",
+      "status": 200,
+      "title": "The Nobel Prize in Physics 1972 - NobelPrize.org",
+      "keyword": "The Nobel Prize in Physics 1972",
+      "passed": true
+    },
+    {
+      "url": "https://openstax.org/books/university-physics-volume-3/pages/9-8-superconductivity",
+      "status": 200,
+      "title": "9.8 Superconductivity - University Physics Volume 3 | OpenStax",
+      "keyword": "Superconductivity",
+      "passed": true
+    }
+  ]
+}
