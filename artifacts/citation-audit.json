@@ -1,12 +1,19 @@
 {
-  "passed": 12,
-  "total": 12,
+  "passed": 14,
+  "total": 14,
   "results": [
     {
       "url": "https://openstax.org/books/university-physics-volume-3/pages/9-3-bonding-in-crystalline-solids",
       "status": 200,
       "title": "9.3 Bonding in Crystalline Solids - University Physics Volume 3 | OpenStax",
       "keyword": "Bonding in Crystalline Solids",
+      "passed": true
+    },
+    {
+      "url": "https://openstax.org/books/chemistry-2e/pages/10-6-lattice-structures-in-crystalline-solids",
+      "status": 200,
+      "title": "10.6 Lattice Structures in Crystalline Solids - Chemistry 2e | OpenStax",
+      "keyword": "Lattice Structures in Crystalline Solids",
       "passed": true
     },
     {
@@ -63,6 +70,13 @@
       "status": 200,
       "title": "11.1 Magnetism and Its Historical Discoveries - University Physics Volume 2 | OpenStax",
       "keyword": "Magnetism and Its Historical Discoveries",
+      "passed": true
+    },
+    {
+      "url": "https://www.pas.rochester.edu/~stte/phy418S23/units/unit_4-3.pdf",
+      "status": 200,
+      "title": "PDF resource",
+      "keyword": "",
       "passed": true
     },
     {

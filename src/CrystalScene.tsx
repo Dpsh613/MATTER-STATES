@@ -7,6 +7,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { chapters, criticalField, magnetization, type ChapterId, type DefectType, type MaterialId } from './physics';
+import { latticeSites, interstitialSites, spinDirections, bondOffsets, type Site } from './models';
 
 export type SceneHandle = { zoom: (factor: number) => void; reset: () => void; inspect: () => void; clearSelection: () => void };
 export type AtomSelection = { symbol: string; kind: string; position: string; explanation: string };
@@ -16,43 +17,18 @@ interface Props {
   field: number; tau: number; scTemperature: number; scField: number;
   onSelect: (selection: AtomSelection | null) => void; onReady: () => void;
 }
-interface Site { x: number; y: number; z: number; kind: 'corner' | 'face' | 'body' | 'anion' | 'cation'; }
-interface Model { root: THREE.Group; update: (time: number, dt: number, live: Props) => void; targets: THREE.InstancedMesh[]; sites: Site[]; }
+interface Model {
+  root: THREE.Group;
+  update: (time: number, dt: number, live: Props) => void;
+  targets: THREE.InstancedMesh[];
+  sites: Site[];
+  interstitials: Site[];
+  interstitialMeshes: THREE.Mesh[];
+}
 interface Engine {
   scene: THREE.Scene; renderer: THREE.WebGLRenderer; camera: THREE.PerspectiveCamera;
   controls: OrbitControls; composer: EffectComposer; model: Model | null; desired: THREE.Vector3 | null;
   focus: THREE.Vector3; initialPosition: THREE.Vector3; needsRender: boolean; inspect?: () => void;
-}
-
-function latticeSites(material: MaterialId, unit: boolean): Site[] {
-  const sites = new Map<string, Site>();
-  const add = (x: number, y: number, z: number, kind: Site['kind']) => {
-    sites.set(`${Math.round(x * 2)},${Math.round(y * 2)},${Math.round(z * 2)}`, { x, y, z, kind });
-  };
-  if (material === 'salt' && !unit) {
-    for (let x = -3; x <= 3; x++) for (let y = -3; y <= 3; y++) for (let z = -3; z <= 3; z++) {
-      add(x / 2, y / 2, z / 2, Math.abs(x + y + z) % 2 ? 'anion' : 'cation');
-    }
-  } else if (material === 'salt') {
-    for (let x = 0; x <= 2; x++) for (let y = 0; y <= 2; y++) for (let z = 0; z <= 2; z++) {
-      add(x / 2 - 0.5, y / 2 - 0.5, z / 2 - 0.5, (x + y + z) % 2 ? 'anion' : 'cation');
-    }
-  } else {
-    const min = unit ? 0 : -1, max = unit ? 0 : 1;
-    for (let x = min; x <= max; x++) for (let y = min; y <= max; y++) for (let z = min; z <= max; z++) {
-      for (const a of [-0.5, 0.5]) for (const b of [-0.5, 0.5]) for (const c of [-0.5, 0.5]) add(x + a, y + b, z + c, 'corner');
-      if (material === 'iron') add(x, y, z, 'body');
-      else {
-        add(x, y + 0.5, z + 0.5, 'face');
-        add(x, y - 0.5, z + 0.5, 'face');
-        add(x + 0.5, y, z + 0.5, 'face');
-        add(x - 0.5, y, z + 0.5, 'face');
-        add(x + 0.5, y + 0.5, z, 'face');
-        add(x + 0.5, y - 0.5, z, 'face');
-      }
-    }
-  }
-  return [...sites.values()];
 }
 
 function makeModel(props: Props): Model {
@@ -79,17 +55,14 @@ function makeModel(props: Props): Model {
   const position = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
   const bonds: [THREE.Vector3, THREE.Vector3][] = [];
+  const offsets = bondOffsets(structure);
   const byPosition = new Map<string, number>();
   sites.forEach((site, index) => byPosition.set(`${Math.round(site.x * 2)},${Math.round(site.y * 2)},${Math.round(site.z * 2)}`, index));
   const defectSites = isDefect ? [...sites.keys()].sort((a, b) => {
     const aP = sites[a], bP = sites[b];
     return (aP.x * aP.x + aP.y * aP.y + aP.z * aP.z) - (bP.x * bP.x + bP.y * bP.y + bP.z * bP.z);
   }).filter((_, i) => i < defectCount) : [];
-  const interstitials: THREE.Vector3[] = [];
-  if (isDefect && defectType === 'interstitial') {
-    const centers = structure === 'copper' ? [[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, -1, 0], [0, 0, -1]] : [[0.25, 0.25, 0.25], [-0.25, 0.25, 0.25], [0.25, -0.25, 0.25], [0.25, 0.25, -0.25], [-0.25, -0.25, 0.25], [-0.25, 0.25, -0.25], [0.25, -0.25, -0.25]];
-    for (let i = 0; i < defectCount; i++) interstitials.push(new THREE.Vector3(...centers[i % centers.length] as [number, number, number]));
-  }
+  const interstitials = isDefect && defectType === 'interstitial' ? interstitialSites(scale === 'cell', defectCount) : [];
   const isVacant = (index: number) => isDefect && defectType === 'vacancy' && defectSites.includes(index);
   sites.forEach((site, index) => {
     const p = new THREE.Vector3(site.x, site.y, site.z);
@@ -99,7 +72,7 @@ function makeModel(props: Props): Model {
     } else {
       const neighbor = defectSites.some(d => Math.abs(sites[d].x - site.x) + Math.abs(sites[d].y - site.y) + Math.abs(sites[d].z - site.z) === 0.5 || (Math.abs(sites[d].x - site.x) + Math.abs(sites[d].y - site.y) + Math.abs(sites[d].z - site.z) < 1.2));
       if (isDefect && neighbor && defectType === 'vacancy') p.multiplyScalar(0.97);
-      if (isDefect && defectType === 'interstitial' && interstitials.some(v => v.distanceTo(p) < 0.72)) p.multiplyScalar(1.025);
+      if (isDefect && defectType === 'interstitial' && interstitials.some(v => Math.hypot(v.x - p.x, v.y - p.y, v.z - p.z) < 0.72)) p.multiplyScalar(1.025);
       matrix.makeScale(1, 1, 1).setPosition(p);
     }
     atoms.setMatrixAt(index, matrix);
@@ -108,7 +81,6 @@ function makeModel(props: Props): Model {
     if (structure === 'salt') color = site.kind === 'anion' ? new THREE.Color('#e3dfc4') : new THREE.Color('#84b99c');
     if (isSuper) color = new THREE.Color('#96c6c3').multiplyScalar(shade);
     atoms.setColorAt(index, color);
-    const offsets = structure === 'iron' ? [[0.5, 0.5, 0.5], [-0.5, 0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, -0.5]] : structure === 'salt' ? [[0.5, 0, 0], [0, 0.5, 0], [0, 0, 0.5]] : [[0.5, 0.5, 0], [0.5, -0.5, 0], [0.5, 0, 0.5], [0.5, 0, -0.5], [0, 0.5, 0.5], [0, 0.5, -0.5]];
     if (!isVacant(index)) for (const offset of offsets) {
       const key = `${Math.round((site.x + offset[0]) * 2)},${Math.round((site.y + offset[1]) * 2)},${Math.round((site.z + offset[2]) * 2)}`;
       const target = byPosition.get(key);
@@ -130,11 +102,17 @@ function makeModel(props: Props): Model {
     box.computeLineDistances(); root.add(box);
   }
   const extras: THREE.Object3D[] = [];
+  const interstitialMeshes: THREE.Mesh[] = [];
   const highlightMaterial = new THREE.MeshBasicMaterial({ color: '#ddc68d', transparent: true, opacity: 0.8, wireframe: true });
   if (isDefect) {
     const gold = new THREE.MeshPhysicalMaterial({ color: '#dfc99c', emissive: '#ac7942', emissiveIntensity: 0.65, metalness: 0.6, roughness: 0.2 });
-    interstitials.forEach(p => {
-      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 16), gold); sphere.position.copy(p); root.add(sphere);
+    interstitials.forEach(site => {
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 16), gold);
+      sphere.position.set(site.x, site.y, site.z);
+      sphere.name = 'interstitial';
+      sphere.userData.site = site;
+      interstitialMeshes.push(sphere);
+      root.add(sphere);
     });
     defectSites.filter(() => defectType === 'vacancy').forEach(index => {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.20, 0.009, 8, 64), highlightMaterial);
@@ -150,13 +128,9 @@ function makeModel(props: Props): Model {
     const arrowMaterial = new THREE.MeshStandardMaterial({ color: '#cdd7bc', emissive: '#477155', emissiveIntensity: 0.3, metalness: 0.5, roughness: 0.3 });
     spinCones = new THREE.InstancedMesh(new THREE.ConeGeometry(0.057, 0.22, 8), arrowMaterial, sites.length);
     const shafts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.012, 0.012, 0.20, 6), arrowMaterial, sites.length);
+    const directions = spinDirections(m, sites.length);
     sites.forEach((site, index) => {
-      const seed = Math.sin(index * 912.73 + 6.3) * 43758.5453;
-      const r = seed - Math.floor(seed);
-      const phi = index * 2.39996;
-      const tilt = (1 - m) * Math.PI * 0.85 + r * (m > 0 ? 0.25 : Math.PI * 1.5);
-      const sign = r < (m + 1) / 2 ? 1 : -1;
-      const direction = new THREE.Vector3(Math.sin(tilt) * Math.cos(phi), Math.cos(tilt) * sign, Math.sin(tilt) * Math.sin(phi)).normalize();
+      const direction = new THREE.Vector3(directions[index].x, directions[index].y, directions[index].z);
       const q = quaternion.setFromUnitVectors(up, direction);
       const p = new THREE.Vector3(site.x, site.y, site.z);
       const base = new THREE.Vector3(0, 0.065, 0).applyQuaternion(q).add(p);
@@ -164,6 +138,8 @@ function makeModel(props: Props): Model {
       const tip = new THREE.Vector3(0, 0.24, 0).applyQuaternion(q).add(p);
       matrix.compose(tip, q, new THREE.Vector3(1, 1, 1)); spinCones!.setMatrixAt(index, matrix);
     });
+    spinCones.userData.spinDirections = directions;
+    spinCones.userData.meanVerticalProjection = directions.reduce((sum, direction) => sum + direction.y, 0) / sites.length;
     root.add(spinCones, shafts);
   }
   if (isConductive || isSuper) {
@@ -222,7 +198,7 @@ function makeModel(props: Props): Model {
       electronMesh.instanceMatrix.needsUpdate = true; trailPositions.needsUpdate = true;
     }
   };
-  return { root, update, targets: [atoms], sites };
+  return { root, update, targets: [atoms], sites, interstitials, interstitialMeshes };
 }
 
 function disposeGroup(group: THREE.Group) {
@@ -334,13 +310,24 @@ const CrystalScene = forwardRef<SceneHandle, Props>(function CrystalScene(props,
     const pointer = new THREE.Vector2();
     let downX = 0, downY = 0;
     const pointerDown = (event: PointerEvent) => { downX = event.clientX; downY = event.clientY; };
-    const showAtom = (id: number) => {
-      if (!e.model || id < 0 || id >= e.model.sites.length) return;
-      const site = e.model.sites[id];
-      const mat = latest.current.material;
-      const symbol = latest.current.chapter === 2 ? 'Cu' : latest.current.chapter === 3 ? 'Fe' : latest.current.chapter === 5 ? 'Pb' : mat === 'copper' ? 'Cu' : mat === 'iron' ? 'Fe' : site.kind === 'anion' ? 'Cl' : 'Na';
-      const kind = latest.current.chapter === 3 ? 'Magnetic moment' : site.kind === 'face' ? 'Face-centered site' : site.kind === 'corner' ? 'Corner site' : site.kind === 'body' ? 'Body-centered site' : site.kind === 'cation' ? 'Sodium ion' : 'Chloride ion';
-      latest.current.onSelect({ symbol, kind, position: `(${site.x.toFixed(2)}, ${site.y.toFixed(2)}, ${site.z.toFixed(2)}) a`, explanation: site.kind === 'corner' ? 'Shared by eight adjacent conventional cells; contributes ⅛ of an atom to one cell.' : site.kind === 'face' ? 'Shared by two adjacent cells; contributes ½ of an atom to one cell.' : site.kind === 'body' ? 'Inside the conventional cell; contributes one whole atom.' : 'Alternating ionic sites form the rock-salt structure. Positions use the conventional-cell coordinate system.' });
+    const showSite = (site: Site) => {
+      if (!e.model) return;
+      const current = latest.current;
+      const structure = current.chapter === 3 ? 'iron' : current.chapter === 2 || current.chapter === 5 ? 'copper' : current.material;
+      const symbol = current.chapter === 2 ? 'Cu' : current.chapter === 3 ? 'Fe' : current.chapter === 5 ? 'Pb' : site.kind === 'interstitial' ? structure === 'salt' ? 'Na' : structure === 'iron' ? 'Fe' : 'Cu' : current.material === 'copper' ? 'Cu' : current.material === 'iron' ? 'Fe' : site.kind === 'anion' ? 'Cl' : 'Na';
+      const kind = current.chapter === 3 ? 'Magnetic moment' : site.kind === 'face' ? 'Face-centered site' : site.kind === 'corner' ? 'Corner site' : site.kind === 'body' ? 'Body-centered site' : site.kind === 'cation' ? 'Sodium ion' : site.kind === 'anion' ? 'Chloride ion' : 'Interstitial site';
+      const explanation = current.chapter === 3
+        ? 'A representative moment on a BCC site. The arrow populations and tilts are generated so their average vertical projection matches the displayed mean-field magnetization.'
+        : site.kind === 'corner'
+          ? 'Shared by eight adjacent conventional cells; contributes ⅛ of an atom to one cell.'
+          : site.kind === 'face'
+            ? 'An FCC face-centre site shared by two adjacent cells; contributes ½ of an atom to one cell. In the bulk lattice, 12 nearest neighbours lie a/√2 away.'
+            : site.kind === 'body'
+              ? 'Inside the conventional cell; contributes one whole atom. In BCC, this site has eight nearest neighbours at √3a/2.'
+              : site.kind === 'interstitial'
+                ? 'An extra atom at an interstitial position inside the displayed sample. Its offset and the nearby relaxation are schematic, not a formation-energy calculation.'
+                : 'Alternating ionic sites form the rock-salt structure. Each ion has six nearest neighbours of the opposite kind at a/2; positions use conventional-cell coordinates.';
+      latest.current.onSelect({ symbol, kind, position: `(${site.x.toFixed(2)}, ${site.y.toFixed(2)}, ${site.z.toFixed(2)}) a`, explanation });
       if (selected.current) { scene.remove(selected.current); selected.current.geometry.dispose(); (selected.current.material as THREE.Material).dispose(); }
       const selection = new THREE.Mesh(new THREE.SphereGeometry(0.18, 20, 12), new THREE.MeshBasicMaterial({ color: '#cde5c6', wireframe: true, transparent: true, opacity: 0.45 }));
       e.model.root.updateMatrixWorld(true);
@@ -355,9 +342,10 @@ const CrystalScene = forwardRef<SceneHandle, Props>(function CrystalScene(props,
     let inspectionIndex = 0;
     e.inspect = () => {
       if (!e.model) return;
-      const sites = e.model.sites.map((_, index) => index).filter(isRealSite);
-      const id = sites[inspectionIndex % sites.length]; inspectionIndex++;
-      if (id !== undefined) showAtom(id);
+      const visibleSites = e.model.sites.filter((_, index) => isRealSite(index));
+      const entries = [...visibleSites, ...e.model.interstitials];
+      const site = entries[inspectionIndex % entries.length]; inspectionIndex++;
+      if (site) showSite(site);
     };
     const pick = (event: PointerEvent) => {
       if (!e.model || event.button > 0 || Math.hypot(event.clientX - downX, event.clientY - downY) > 5) return;
@@ -365,7 +353,9 @@ const CrystalScene = forwardRef<SceneHandle, Props>(function CrystalScene(props,
       pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
       const ray = new THREE.Raycaster(); ray.setFromCamera(pointer, camera);
       const intersection = ray.intersectObjects(e.model.targets, false).find(hit => hit.instanceId !== undefined && isRealSite(hit.instanceId));
-      if (intersection?.instanceId !== undefined) showAtom(intersection.instanceId);
+      const extra = ray.intersectObjects(e.model.interstitialMeshes, false)[0];
+      if (intersection?.instanceId !== undefined) showSite(e.model.sites[intersection.instanceId]);
+      else if (extra?.object.userData.site) showSite(extra.object.userData.site as Site);
       else clearSelection();
     };
     const keyDown = (event: KeyboardEvent) => {

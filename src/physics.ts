@@ -11,10 +11,11 @@ export const chapters = [
     theme: '#b0d9bf',
     insight: 'A crystal is a lattice plus a basis. Translation by a lattice vector leaves the ideal structure unchanged — not every atom has to be the same.',
     equation: 'r = r₀ + n₁a₁ + n₂a₂ + n₃a₃',
-    explanation: 'The conventional cubic cell is a convenient description, not the smallest repeating volume. A face-centered cubic (FCC) cell contains four lattice points; a body-centered cubic (BCC) cell contains two. Sodium chloride has an FCC Bravais lattice with a two-ion basis, so its conventional cell contains four lattice points, four NaCl formula units, and eight ions. The surrounding atoms continue the pattern.',
+    explanation: 'The conventional cubic cell is a convenient description, not the smallest repeating volume. A face-centered cubic (FCC) cell contains four lattice points, and each interior atom has 12 nearest neighbours at a/√2; a body-centered cubic (BCC) cell contains two, with eight nearest neighbours at √3a/2. Sodium chloride has an FCC Bravais lattice with a two-ion basis, so its conventional cell contains four lattice points, four NaCl formula units, and eight ions. The surrounding atoms continue the pattern.',
     model: 'Atoms are shown as spheres and nearest-neighbor connections as bonds. Sphere sizes and bond lines are visual guides, not literal electron-density surfaces or a claim that every connection is a covalent bond.',
     references: [
       ['OpenStax · Bonding in crystalline solids', 'https://openstax.org/books/university-physics-volume-3/pages/9-3-bonding-in-crystalline-solids'],
+      ['OpenStax · Lattice structures in crystalline solids', 'https://openstax.org/books/chemistry-2e/pages/10-6-lattice-structures-in-crystalline-solids'],
       ['Lattice constant · Copper · Wikipedia', 'https://en.wikipedia.org/wiki/Copper'],
       ['Lattice constant · Iron · Wikipedia', 'https://en.wikipedia.org/wiki/Iron'],
       ['Lattice constant · Sodium chloride · Wikipedia', 'https://en.wikipedia.org/wiki/Sodium_chloride'],
@@ -53,8 +54,8 @@ export const chapters = [
     insight: 'Ferromagnetic order emerges from interactions between atomic magnetic moments. Above the Curie temperature, thermal disorder overwhelms the long-range order — not the individual moments.',
     equation: 'm = tanh(mT꜀ / T)  ·  T꜀ ≈ 1043 K (Fe)',
     explanation: 'The mean-field equation describes a spin-½ ferromagnet. Below its Curie point, a nonzero spontaneous magnetization is possible. We use a mean-field solution for illustrative iron, with the experimental Curie temperature supplied as an input. Iron is a real itinerant-electron magnet, so this model does not capture its microscopic details. The temperature control stays within the BCC α-Fe region, below the structural transition near 1185 K.',
-    model: 'The arrows are representative magnetic moments, not classical needles inside iron atoms. Their arrangement illustrates mean-field order and thermal disorder; the displayed moment orientations are not a Monte Carlo simulation. The average magnetization is calculated from the mean-field equation.',
-    references: [['Curie temperature · Britannica', 'https://www.britannica.com/science/Curie-point'], ['Magnetism · OpenStax', 'https://openstax.org/books/university-physics-volume-2/pages/11-1-magnetism-and-its-historical-discoveries']],
+    model: 'The arrows are representative magnetic moments, not classical needles inside iron atoms. Their directions are generated so the average vertical projection of the sample matches the displayed mean-field magnetization, with balanced up/down populations above the Curie point. This is an illustrative spin model, not a Monte Carlo simulation.',
+    references: [['Curie temperature · Britannica', 'https://www.britannica.com/science/Curie-point'], ['Magnetism · OpenStax', 'https://openstax.org/books/university-physics-volume-2/pages/11-1-magnetism-and-its-historical-discoveries'], ['Mean-field model notes · University of Rochester', 'https://www.pas.rochester.edu/~stte/phy418S23/units/unit_4-3.pdf']],
   },
   {
     id: 4, name: 'Crystal defects', short: 'The beauty of imperfection', figure: 'THE EXCEPTION TO THE PATTERN',

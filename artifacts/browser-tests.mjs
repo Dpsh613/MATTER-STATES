@@ -40,6 +40,51 @@ const latticeParameter = async () => (await page.locator('.parameter-note').filt
 const numeric = text => Number((text.match(/-?\d+(?:\.\d+)?/) || [])[0]);
 await page.goto('http://localhost:5173', { waitUntil: 'networkidle', timeout: 60000 });
 await page.waitForTimeout(1400);
+const modelChecks = await page.evaluate(async () => {
+  const model = await import('/src/models.ts');
+  const cu = model.latticeSites('copper', true);
+  const faces = cu.filter(site => site.kind === 'face');
+  const corners = cu.filter(site => site.kind === 'corner');
+  const cellBonds = model.bondPairs('copper', cu);
+  const cellDegrees = new Array(cu.length).fill(0);
+  cellBonds.forEach(([a, b]) => { cellDegrees[a]++; cellDegrees[b]++; });
+  const faceDegrees = cu.map((site, index) => site.kind === 'face' ? cellDegrees[index] : null).filter(value => value !== null);
+  const cornerDegrees = cu.map((site, index) => site.kind === 'corner' ? cellDegrees[index] : null).filter(value => value !== null);
+  const lattice = model.latticeSites('copper', false);
+  const latticeBonds = model.bondPairs('copper', lattice);
+  const latticeDegrees = new Array(lattice.length).fill(0);
+  latticeBonds.forEach(([a, b]) => { latticeDegrees[a]++; latticeDegrees[b]++; });
+  const maxCoordination = Math.max(...latticeDegrees);
+  const cellInterstitials = model.interstitialSites(true, 7);
+  const latticeInterstitials = model.interstitialSites(false, 7);
+  const spins = [0, 0.001, 0.1, 0.5, 0.8, 0.998, 1].map(m => {
+    const dirs = model.spinDirections(m, 81);
+    const meanY = dirs.reduce((sum, direction) => sum + direction.y, 0) / dirs.length;
+    const maxNormError = Math.max(...dirs.map(direction => Math.abs(Math.hypot(direction.x, direction.y, direction.z) - 1)));
+    return { m, meanY, maxNormError, up: dirs.filter(direction => direction.y > 0.5).length, down: dirs.filter(direction => direction.y < -0.5).length };
+  });
+  return {
+    cuCount: cu.length,
+    faceCount: faces.length,
+    cornerCount: corners.length,
+    faceDegrees,
+    cornerDegrees,
+    faceCoordinatesValid: faces.every(site => [site.x, site.y, site.z].filter(value => Math.abs(value) === 0.5).length === 1),
+    cellPairs: cellBonds.length,
+    maxCoordination,
+    nnPm: model.nearestNeighbourDistance('copper', 361.5),
+    cellInterstitialMax: Math.max(...cellInterstitials.flatMap(site => [Math.abs(site.x), Math.abs(site.y), Math.abs(site.z)])),
+    latticeInterstitialMax: Math.max(...latticeInterstitials.flatMap(site => [Math.abs(site.x), Math.abs(site.y), Math.abs(site.z)])),
+    spins,
+  };
+});
+check('FCC conventional cell has 14 sites: 8 corners and 6 face centres', modelChecks.cuCount === 14 && modelChecks.cornerCount === 8 && modelChecks.faceCount === 6);
+check('FCC face centres use face coordinates, not edge midpoints', modelChecks.faceCoordinatesValid);
+check('FCC cell bonds reproduce 8 face-site and 3 corner-site neighbours', modelChecks.faceDegrees.every(value => value === 8) && modelChecks.cornerDegrees.every(value => value === 3) && modelChecks.cellPairs === 36);
+check('FCC bulk coordination is 12 at a/√2', modelChecks.maxCoordination === 12 && Math.abs(modelChecks.nnPm - 255.62) < 0.01);
+check('Interstitial examples stay inside cell and lattice samples', modelChecks.cellInterstitialMax <= 0.5 && modelChecks.latticeInterstitialMax <= 1.5);
+check('Spin arrow average projection matches mean-field m', modelChecks.spins.every(entry => Math.abs(entry.meanY - entry.m) < 1e-12 && entry.maxNormError < 1e-12));
+check('Above Tc spin populations are balanced, not downward biased', modelChecks.spins[0].up === 40 && modelChecks.spins[0].down === 40 && Math.abs(modelChecks.spins[0].meanY) < 1e-12);
 check('Desktop loads a WebGL lattice', await page.locator('canvas').count() === 1 && !(await page.locator('.fallback-scene').count()));
 check('Desktop has no horizontal overflow', await page.evaluate(() => document.body.scrollWidth === innerWidth));
 await shot.screenshot({ path: 'artifacts/desktop-initial.png', fullPage: true, timeout: 90000 });
@@ -52,6 +97,18 @@ check('Unit-cell view is selectable', await page.getByRole('button', { name: 'Un
 check('Copper cell annotation counts four FCC lattice points', (await annotation()).includes('ONE CELL.') && (await annotation()).includes('FOUR LATTICE POINTS.') && (await annotation()).includes('FCC: 8 corners (⅛) + 6 faces (½)'));
 await page.waitForTimeout(900);
 await shot.screenshot({ path: 'artifacts/desktop-cell.png', fullPage: true, timeout: 90000 });
+const inspectedCell = [];
+for (let i = 0; i < 14; i++) {
+  await page.getByRole('button', { name: 'Inspect an atom', exact: true }).click();
+  const kind = (await page.locator('.selected-title span').textContent()) ?? '';
+  const position = (await page.locator('.atom-selection p').first().textContent()) ?? '';
+  inspectedCell.push({ kind, position, coords: (position.match(/-?\d+\.\d+/g) || []).map(Number) });
+}
+const inspectedFaces = inspectedCell.filter(entry => entry.kind === 'Face-centered site');
+check('Atom inspector reports 8 corners and 6 face-centred sites for FCC', inspectedCell.filter(entry => entry.kind === 'Corner site').length === 8 && inspectedFaces.length === 6);
+check('Inspector face positions are (½,0,0), (0,½,0), or (0,0,½)', inspectedFaces.every(entry => entry.coords.filter(value => Math.abs(value) === 0.5).length === 1));
+check('Inspector never labels an edge midpoint as face-centred', !inspectedCell.some(entry => entry.kind === 'Face-centered site' && entry.coords.filter(value => Math.abs(value) === 0.5).length !== 1));
+await page.getByRole('button', { name: 'Close atom inspection', exact: true }).click();
 await openControls();
 check('Copper reference lattice parameter is shown precisely', (await latticeParameter()).includes('361.5 pm'));
 await page.getByLabel('Crystal structure', { exact: true }).selectOption('iron');
@@ -142,19 +199,44 @@ check('Mean-field magnetization is 99.8% at 300 K', numeric(await page.locator('
 await setRange('Temperature', 1045);
 check('Above-Curie model enters the paramagnetic phase', (await page.locator('.scene-phase-label').textContent()).includes('PARAMAGNETIC'));
 check('Mean-field order vanishes above the Curie point', (await page.locator('.calculated-readout').textContent()).includes('0.0'));
+await page.waitForTimeout(900);
+await shot.screenshot({ path: 'artifacts/desktop-magnetism-paramagnetic.png', fullPage: true, timeout: 90000 });
 await setRange('Temperature', 300);
 await closeControls();
-await page.waitForTimeout(350);
+await page.waitForTimeout(1200);
 await shot.screenshot({ path: 'artifacts/desktop-magnetism.png', fullPage: true, timeout: 90000 });
 await nav(4);
 await openControls();
+await page.getByLabel('Defect crystal material', { exact: true }).selectOption('copper');
+check('Defect view switches to the requested copper sample', (await page.locator('.specimen-label').textContent()).includes('Copper'));
 await setRange('Defects in the sample', 7);
 await page.getByLabel('Point defect type', { exact: true }).selectOption('interstitial');
 check('Interstitial count updates', (await page.locator('.defect-status').textContent()).includes('7 interstitials'));
+await closeControls();
+await page.getByRole('button', { name: 'Unit cell', exact: true }).click();
+await page.waitForTimeout(500);
+const interstitialInspections = [];
+for (let i = 0; i < 30 && interstitialInspections.length < 7; i++) {
+  await page.getByRole('button', { name: 'Inspect an atom', exact: true }).click();
+  const kind = (await page.locator('.selected-title span').textContent()) ?? '';
+  const position = (await page.locator('.atom-selection p').first().textContent()) ?? '';
+  if (kind === 'Interstitial site') {
+    const key = position;
+    if (!interstitialInspections.some(entry => entry.position === key)) {
+      interstitialInspections.push({ position, coords: (position.match(/-?\d+\.\d+/g) || []).map(Number) });
+    }
+  }
+}
+check('All seven interstitials are present in the unit-cell inspector', interstitialInspections.length === 7);
+check('Unit-cell interstitial coordinates stay inside the cell', interstitialInspections.every(entry => entry.coords.every(value => Math.abs(value) <= 0.5)));
+await page.getByRole('button', { name: 'Close atom inspection', exact: true }).click();
+await page.waitForTimeout(900);
+await shot.screenshot({ path: 'artifacts/desktop-interstitials.png', fullPage: true, timeout: 90000 });
+await openControls();
 await page.getByLabel('Point defect type', { exact: true }).selectOption('vacancy');
 check('Vacancy model updates', (await page.locator('.defect-status').textContent()).includes('7 vacancies'));
 await closeControls();
-await page.waitForTimeout(350);
+await page.waitForTimeout(1200);
 await shot.screenshot({ path: 'artifacts/desktop-defects.png', fullPage: true, timeout: 90000 });
 await nav(5);
 await openControls();
@@ -196,6 +278,7 @@ await page.keyboard.press('ArrowLeft');
 check('Left-arrow navigation returns to the previous chapter', (await page.locator('.chapter-tab.active').textContent()).includes('Atomic lattices'));
 const requiredReferences = [
   'https://openstax.org/books/university-physics-volume-3/pages/9-3-bonding-in-crystalline-solids',
+  'https://openstax.org/books/chemistry-2e/pages/10-6-lattice-structures-in-crystalline-solids',
   'https://en.wikipedia.org/wiki/Copper',
   'https://en.wikipedia.org/wiki/Iron',
   'https://en.wikipedia.org/wiki/Sodium_chloride',
@@ -204,6 +287,7 @@ const requiredReferences = [
   'https://physics.nist.gov/cuu/Constants/',
   'https://www.britannica.com/science/Curie-point',
   'https://openstax.org/books/university-physics-volume-2/pages/11-1-magnetism-and-its-historical-discoveries',
+  'https://www.pas.rochester.edu/~stte/phy418S23/units/unit_4-3.pdf',
   'https://en.wikipedia.org/wiki/Crystallographic_defect',
   'https://www.nobelprize.org/prizes/physics/1972/summary/',
   'https://openstax.org/books/university-physics-volume-3/pages/9-8-superconductivity',
